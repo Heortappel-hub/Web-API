@@ -1,9 +1,7 @@
-from rest_framework import viewsets, status, filters
+from rest_framework import viewsets, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.renderers import TemplateHTMLRenderer, JSONRenderer
 from django.db.models import Avg, Max, Min, Count
-from django.shortcuts import render
 from .models import StudentPerformance
 from .serializers import StudentPerformanceSerializer
 
@@ -11,9 +9,6 @@ from .serializers import StudentPerformanceSerializer
 class StudentPerformanceViewSet(viewsets.ModelViewSet):
     """
     Student Performance ViewSet - Provides CRUD and statistics endpoints.
-    
-    Supports filtering by gender, school type, and score range.
-    Supports pagination, search, and ordering.
     
     **Endpoints:**
     - GET /api/students/ - List all students (paginated)
@@ -23,7 +18,6 @@ class StudentPerformanceViewSet(viewsets.ModelViewSet):
     - PATCH /api/students/{id}/ - Partial update
     - DELETE /api/students/{id}/ - Delete a student
     - GET /api/students/stats/ - Get statistics
-    - GET /api/students/table/ - View as HTML table
     
     **Query Parameters:**
     - gender: Filter by gender (Male/Female)
@@ -91,13 +85,3 @@ class StudentPerformanceViewSet(viewsets.ModelViewSet):
             'by_gender': list(gender_stats),
             'by_school_type': list(school_stats),
         })
-
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer])
-    def table(self, request):
-        """
-        HTML Table View - GET /api/students/table/
-        
-        Displays student data in an HTML table format.
-        """
-        queryset = self.get_queryset()[:100]  # Limit to 100 for display
-        return Response({'students': queryset}, template_name='students/table.html')
