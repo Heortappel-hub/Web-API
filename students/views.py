@@ -1,15 +1,37 @@
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.renderers import TemplateHTMLRenderer, JSONRenderer
 from django.db.models import Avg, Max, Min, Count
+from django.shortcuts import render
 from .models import StudentPerformance
 from .serializers import StudentPerformanceSerializer
 
 
 class StudentPerformanceViewSet(viewsets.ModelViewSet):
     """
-        学生成绩视图集，提供CRUD和统计信息接口
-        支持根据性别、学校类型和成绩范围进行筛选，支持分页和排序
+    Student Performance ViewSet - Provides CRUD and statistics endpoints.
+    
+    Supports filtering by gender, school type, and score range.
+    Supports pagination, search, and ordering.
+    
+    **Endpoints:**
+    - GET /api/students/ - List all students (paginated)
+    - POST /api/students/ - Create a new student record
+    - GET /api/students/{id}/ - Retrieve a student
+    - PUT /api/students/{id}/ - Update a student
+    - PATCH /api/students/{id}/ - Partial update
+    - DELETE /api/students/{id}/ - Delete a student
+    - GET /api/students/stats/ - Get statistics
+    - GET /api/students/table/ - View as HTML table
+    
+    **Query Parameters:**
+    - gender: Filter by gender (Male/Female)
+    - school_type: Filter by school type (Public/Private)
+    - min_score: Minimum exam score
+    - max_score: Maximum exam score
+    - search: Search in gender, school_type, parental_involvement
+    - ordering: Order by exam_score, hours_studied, attendance, id
     """
     queryset = StudentPerformance.objects.all()
     serializer_class = StudentPerformanceSerializer
@@ -21,7 +43,7 @@ class StudentPerformanceViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         
-        # 自定义筛选
+        # Custom filtering
         gender = self.request.query_params.get('gender')
         school_type = self.request.query_params.get('school_type')
         min_score = self.request.query_params.get('min_score')
@@ -40,7 +62,11 @@ class StudentPerformanceViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        """获取统计信息 GET /api/students/stats/"""
+        """
+        Get Statistics - GET /api/students/stats/
+        
+        Returns overall statistics and breakdowns by gender and school type.
+        """
         stats = StudentPerformance.objects.aggregate(
             total_count=Count('id'),
             avg_score=Avg('exam_score'),
@@ -65,3 +91,13 @@ class StudentPerformanceViewSet(viewsets.ModelViewSet):
             'by_gender': list(gender_stats),
             'by_school_type': list(school_stats),
         })
+
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer])
+    def table(self, request):
+        """
+        HTML Table View - GET /api/students/table/
+        
+        Displays student data in an HTML table format.
+        """
+        queryset = self.get_queryset()[:100]  # Limit to 100 for display
+        return Response({'students': queryset}, template_name='students/table.html')
