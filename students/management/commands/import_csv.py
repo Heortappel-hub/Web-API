@@ -1,19 +1,38 @@
 import csv
 from django.core.management.base import BaseCommand
-from students.models import StudentPerformance
+from students.models import StudentPerformance, ImportBatch
 
 
 class Command(BaseCommand):
     help = 'Import student data from CSV file'
 
-    def handle(self, *args, **kwargs):
-        csv_file_path = 'StudentPerformanceFactors.csv'
+    def add_arguments(self, parser):
+        parser.add_argument('--file', type=str, default='StudentPerformanceFactors.csv',
+                            help='Path to CSV file')
+        parser.add_argument('--clear', action='store_true',
+                            help='Clear all existing data before import')
+
+    def handle(self, *args, **options):
+        csv_file_path = options['file']
         
-        # Clear existing data to avoid duplicates
-        StudentPerformance.objects.all().delete()
-        self.stdout.write('Cleared existing data')
+        # Optionally clear existing data
+        if options['clear']:
+            StudentPerformance.objects.all().delete()
+            ImportBatch.objects.all().delete()
+            self.stdout.write('Cleared all existing data')
         
-        batch = []           # List to collect objects
+        # Get next batch number
+        last_batch = ImportBatch.objects.order_by('-batch_number').first()
+        new_batch_number = (last_batch.batch_number + 1) if last_batch else 1
+        
+        # Create batch record
+        batch = ImportBatch.objects.create(
+            batch_number=new_batch_number,
+            filename=csv_file_path
+        )
+        self.stdout.write(f'Created batch #{new_batch_number}')
+        
+        records = []         # List to collect objects
         batch_size = 1000    # Number of records per bulk insert
 
         with open(csv_file_path, 'r', encoding='utf-8') as f:
@@ -42,18 +61,24 @@ class Command(BaseCommand):
                     distance_from_home=row['Distance_from_Home'] or '',
                     gender=row['Gender'] or '',
                     exam_score=int(row['Exam_Score'] or 0),
+                    batch=batch,
                 )
-                batch.append(student)
+                records.append(student)
                 
                 # Bulk insert when batch size is reached
-                if len(batch) >= batch_size:
-                    StudentPerformance.objects.bulk_create(batch)
-                    self.stdout.write(f'Inserted {len(batch)} records...')
-                    batch = []  # Clear the list
+                if len(records) >= batch_size:
+                    StudentPerformance.objects.bulk_create(records)
+                    self.stdout.write(f'Inserted {len(records)} records...')
+                    records = []  # Clear the list
             
             # Insert remaining records
-            if batch:
-                StudentPerformance.objects.bulk_create(batch)
+            if records:
+                StudentPerformance.objects.bulk_create(records)
 
-        total = StudentPerformance.objects.count()
-        self.stdout.write(self.style.SUCCESS(f'Done! Total: {total} records'))
+        # Update batch record count
+        batch.record_count = StudentPerformance.objects.filter(batch=batch).count()
+        batch.save()
+
+        self.stdout.write(self.style.SUCCESS(
+            f'Done! Batch #{new_batch_number}: {batch.record_count} records imported'
+        ))

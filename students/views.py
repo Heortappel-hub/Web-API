@@ -1,9 +1,12 @@
-from rest_framework import viewsets, filters
+import csv
+import io
+from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.db.models import Avg, Max, Min, Count
-from .models import StudentPerformance
-from .serializers import StudentPerformanceSerializer
+from .models import StudentPerformance, ImportBatch
+from .serializers import StudentPerformanceSerializer, ImportBatchSerializer, CSVUploadSerializer
 
 
 class StudentPerformanceViewSet(viewsets.ModelViewSet):
@@ -84,4 +87,127 @@ class StudentPerformanceViewSet(viewsets.ModelViewSet):
             'overall': stats,
             'by_gender': list(gender_stats),
             'by_school_type': list(school_stats),
+        })
+
+    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_csv(self, request):
+        """
+        Upload CSV - POST /api/students/upload_csv/
+        
+        Uploads a CSV file and imports data with a new batch number.
+        Returns the batch number for tracking.
+        """
+        serializer = CSVUploadSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        csv_file = request.FILES['file']
+        
+        # Check file extension
+        if not csv_file.name.endswith('.csv'):
+            return Response({'error': 'File must be a CSV'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get next batch number
+        last_batch = ImportBatch.objects.order_by('-batch_number').first()
+        new_batch_number = (last_batch.batch_number + 1) if last_batch else 1
+        
+        # Create batch record
+        batch = ImportBatch.objects.create(
+            batch_number=new_batch_number,
+            filename=csv_file.name
+        )
+        
+        # Parse CSV
+        try:
+            decoded_file = csv_file.read().decode('utf-8')
+            io_string = io.StringIO(decoded_file)
+            reader = csv.DictReader(io_string)
+            
+            records = []
+            for row in reader:
+                student = StudentPerformance(
+                    hours_studied=int(row.get('Hours_Studied') or 0),
+                    attendance=int(row.get('Attendance') or 0),
+                    parental_involvement=row.get('Parental_Involvement') or '',
+                    access_to_resources=row.get('Access_to_Resources') or '',
+                    extracurricular_activities=row.get('Extracurricular_Activities') or '',
+                    sleep_hours=int(row.get('Sleep_Hours') or 0),
+                    previous_scores=int(row.get('Previous_Scores') or 0),
+                    motivation_level=row.get('Motivation_Level') or '',
+                    internet_access=row.get('Internet_Access') or '',
+                    tutoring_sessions=int(row.get('Tutoring_Sessions') or 0),
+                    family_income=row.get('Family_Income') or '',
+                    teacher_quality=row.get('Teacher_Quality') or '',
+                    school_type=row.get('School_Type') or '',
+                    peer_influence=row.get('Peer_Influence') or '',
+                    physical_activity=int(row.get('Physical_Activity') or 0),
+                    learning_disabilities=row.get('Learning_Disabilities') or '',
+                    parental_education_level=row.get('Parental_Education_Level') or '',
+                    distance_from_home=row.get('Distance_from_Home') or '',
+                    gender=row.get('Gender') or '',
+                    exam_score=int(row.get('Exam_Score') or 0),
+                    batch=batch,
+                )
+                records.append(student)
+                
+                # Bulk insert every 1000 records
+                if len(records) >= 1000:
+                    StudentPerformance.objects.bulk_create(records)
+                    records = []
+            
+            # Insert remaining records
+            if records:
+                StudentPerformance.objects.bulk_create(records)
+            
+            # Update batch record count
+            batch.record_count = StudentPerformance.objects.filter(batch=batch).count()
+            batch.save()
+            
+            return Response({
+                'message': 'CSV imported successfully',
+                'batch_number': new_batch_number,
+                'record_count': batch.record_count,
+                'filename': csv_file.name
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            batch.delete()
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ImportBatchViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Import Batch ViewSet - View import batches.
+    
+    **Endpoints:**
+    - GET /api/batches/ - List all batches
+    - GET /api/batches/{id}/ - Get batch details
+    - GET /api/batches/{id}/students/ - Get students in this batch
+    """
+    queryset = ImportBatch.objects.all().order_by('-created_at')
+    serializer_class = ImportBatchSerializer
+    
+    @action(detail=True, methods=['get'])
+    def students(self, request, pk=None):
+        """Get all students in this batch"""
+        batch = self.get_object()
+        students = StudentPerformance.objects.filter(batch=batch)
+        serializer = StudentPerformanceSerializer(students, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['get'])
+    def stats(self, request, pk=None):
+        """Get statistics for this batch"""
+        batch = self.get_object()
+        stats = StudentPerformance.objects.filter(batch=batch).aggregate(
+            total_count=Count('id'),
+            avg_score=Avg('exam_score'),
+            max_score=Max('exam_score'),
+            min_score=Min('exam_score'),
+            avg_hours_studied=Avg('hours_studied'),
+            avg_attendance=Avg('attendance'),
+        )
+        return Response({
+            'batch_number': batch.batch_number,
+            'stats': stats
         })
