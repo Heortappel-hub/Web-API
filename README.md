@@ -8,7 +8,17 @@ This project implements a RESTful API for managing and analysing student perform
 
 The API allows users to store student information and explore how factors such as study hours, sleep, attendance, and socio-economic background influence exam performance.
 
+**Key Features:**
+- Full CRUD operations for student records
+- CSV batch import with tracking
+- Token-based authentication
+- Score distribution analysis (per 10 points)
+- Factor correlation analysis to identify most impactful factors on exam performance
+- Filtering, searching and pagination
+
 The project is developed using Django and Django REST Framework with an SQLite database.
+
+**Live Demo:** https://heortappel.pythonanywhere.com
 
 
 ## Technology Stack
@@ -45,7 +55,9 @@ python manage.py runserver
 
 ## API Endpoints
 
-Base URL: `http://127.0.0.1:8000`
+Base URL:
+- **Production:** `https://heortappel.pythonanywhere.com`
+- **Local:** `http://127.0.0.1:8000`
 
 ### Student API
 
@@ -68,6 +80,39 @@ Base URL: `http://127.0.0.1:8000`
 | GET | /api/batches/{id}/ | Get batch details |
 | GET | /api/batches/{id}/students/ | Get all students in a batch |
 | GET | /api/batches/{id}/stats/ | Get statistics for a batch |
+| GET | /api/batches/{id}/analysis/ | Get score distribution and factor analysis |
+
+**Analysis Response Example:**
+```json
+{
+  "batch_number": 1,
+  "total_students": 6607,
+  "score_distribution": {
+    "0-9": 0,
+    "10-19": 0,
+    "20-29": 0,
+    "30-39": 0,
+    "40-49": 0,
+    "50-59": 831,
+    "60-69": 2694,
+    "70-79": 2029,
+    "80-89": 879,
+    "90-100": 174
+  },
+  "factor_correlations": {
+    "hours_studied": 0.1631,
+    "attendance": 0.1578,
+    "tutoring_sessions": 0.1012,
+    "sleep_hours": 0.0534,
+    "physical_activity": 0.0198
+  },
+  "most_impactful_factor": {
+    "name": "hours_studied",
+    "correlation": 0.1631,
+    "interpretation": "weak positive correlation"
+  }
+}
+```
 
 ### Authentication API
 

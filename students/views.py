@@ -281,8 +281,8 @@ class ImportBatchViewSet(viewsets.ReadOnlyModelViewSet):
                 return 0
             return numerator / denominator
         
-        # Numeric factors to analyze
-        numeric_factors = ['hours_studied', 'attendance', 'sleep_hours', 'previous_scores', 
+        # Numeric factors to analyze (excluding previous_scores as it's score-related)
+        numeric_factors = ['hours_studied', 'attendance', 'sleep_hours', 
                           'tutoring_sessions', 'physical_activity']
         
         correlations = {}
