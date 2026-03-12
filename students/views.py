@@ -234,3 +234,90 @@ class ImportBatchViewSet(viewsets.ReadOnlyModelViewSet):
             'batch_number': batch.batch_number,
             'stats': stats
         })
+
+    @action(detail=True, methods=['get'])
+    def analysis(self, request, pk=None):
+        """
+        Get Analysis - GET /api/batches/{id}/analysis/
+        
+        Returns score distribution (per 10 points) and most impactful factors.
+        """
+        batch = self.get_object()
+        students = StudentPerformance.objects.filter(batch=batch)
+        
+        if not students.exists():
+            return Response({'error': 'No students in this batch'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Score distribution (0-9, 10-19, ..., 90-100)
+        distribution = {f'{i*10}-{i*10+9}': 0 for i in range(10)}
+        distribution['90-100'] = 0  # Include 100
+        
+        scores = list(students.values_list('exam_score', flat=True))
+        for score in scores:
+            if score >= 90:
+                distribution['90-100'] += 1
+            else:
+                bucket = f'{(score // 10) * 10}-{(score // 10) * 10 + 9}'
+                distribution[bucket] += 1
+        
+        # Calculate correlation for numeric factors
+        def calculate_correlation(factor_values, score_values):
+            """Calculate Pearson correlation coefficient"""
+            n = len(factor_values)
+            if n == 0:
+                return 0
+            
+            mean_x = sum(factor_values) / n
+            mean_y = sum(score_values) / n
+            
+            numerator = sum((x - mean_x) * (y - mean_y) for x, y in zip(factor_values, score_values))
+            
+            sum_sq_x = sum((x - mean_x) ** 2 for x in factor_values)
+            sum_sq_y = sum((y - mean_y) ** 2 for y in score_values)
+            
+            denominator = (sum_sq_x * sum_sq_y) ** 0.5
+            
+            if denominator == 0:
+                return 0
+            return numerator / denominator
+        
+        # Numeric factors to analyze
+        numeric_factors = ['hours_studied', 'attendance', 'sleep_hours', 'previous_scores', 
+                          'tutoring_sessions', 'physical_activity']
+        
+        correlations = {}
+        for factor in numeric_factors:
+            factor_values = list(students.values_list(factor, flat=True))
+            correlation = calculate_correlation(factor_values, scores)
+            correlations[factor] = round(correlation, 4)
+        
+        # Sort by absolute correlation value
+        sorted_factors = sorted(correlations.items(), key=lambda x: abs(x[1]), reverse=True)
+        
+        return Response({
+            'batch_number': batch.batch_number,
+            'total_students': len(scores),
+            'score_distribution': distribution,
+            'factor_correlations': dict(sorted_factors),
+            'most_impactful_factor': {
+                'name': sorted_factors[0][0] if sorted_factors else None,
+                'correlation': sorted_factors[0][1] if sorted_factors else None,
+                'interpretation': self._interpret_correlation(sorted_factors[0][1]) if sorted_factors else None
+            }
+        })
+    
+    def _interpret_correlation(self, correlation):
+        """Interpret correlation strength"""
+        abs_corr = abs(correlation)
+        direction = 'positive' if correlation > 0 else 'negative'
+        
+        if abs_corr >= 0.7:
+            strength = 'strong'
+        elif abs_corr >= 0.4:
+            strength = 'moderate'
+        elif abs_corr >= 0.2:
+            strength = 'weak'
+        else:
+            strength = 'very weak'
+        
+        return f'{strength} {direction} correlation'
