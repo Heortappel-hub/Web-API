@@ -1,12 +1,35 @@
 import csv
 import io
-from rest_framework import viewsets, filters, status
+from rest_framework import viewsets, filters, status, generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import AllowAny
+from rest_framework.authtoken.models import Token
 from django.db.models import Avg, Max, Min, Count
 from .models import StudentPerformance, ImportBatch
-from .serializers import StudentPerformanceSerializer, ImportBatchSerializer, CSVUploadSerializer
+from .serializers import StudentPerformanceSerializer, ImportBatchSerializer, CSVUploadSerializer, UserRegisterSerializer
+
+
+class RegisterView(generics.CreateAPIView):
+    """
+    User Registration - POST /api/register/
+    
+    Creates a new user account and returns an authentication token.
+    """
+    serializer_class = UserRegisterSerializer
+    permission_classes = [AllowAny]
+    
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        token, created = Token.objects.get_or_create(user=user)
+        return Response({
+            'message': 'User registered successfully',
+            'username': user.username,
+            'token': token.key
+        }, status=status.HTTP_201_CREATED)
 
 
 class StudentPerformanceViewSet(viewsets.ModelViewSet):

@@ -51,7 +51,7 @@ Base URL: `http://127.0.0.1:8000`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | /api/students/ | List all students (paginated) |
+| GET | /api/students/ | List all students |
 | POST | /api/students/ | Create a new student record |
 | GET | /api/students/{id}/ | Get a student by ID |
 | PUT | /api/students/{id}/ | Update a student (full) |
@@ -68,6 +68,39 @@ Base URL: `http://127.0.0.1:8000`
 | GET | /api/batches/{id}/ | Get batch details |
 | GET | /api/batches/{id}/students/ | Get all students in a batch |
 | GET | /api/batches/{id}/stats/ | Get statistics for a batch |
+
+### Authentication API
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | /api/register/ | Register new user | No |
+| POST | /api/token/ | Get authentication token | No |
+
+**Register:**
+```
+POST /api/register/
+username=newuser&email=user@example.com&password=pass123456
+
+Response: {"message": "User registered successfully", "username": "newuser", "token": "abc123..."}
+```
+
+**Get Token:**
+```
+POST /api/token/
+username=testuser&password=testpass123
+
+Response: {"token": "abc123..."}
+```
+
+**Use Token:**
+```
+curl -H "Authorization: Token abc123..." http://127.0.0.1:8000/api/students/
+```
+
+All other endpoints require authentication. Requests without a valid token will return:
+```json
+{"detail": "Authentication credentials were not provided."}
+```
 
 
 ## Query Parameters

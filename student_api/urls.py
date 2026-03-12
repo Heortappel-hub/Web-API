@@ -17,7 +17,9 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework.authtoken.views import obtain_auth_token
 from students import views
+from students.views import RegisterView
 
 router = DefaultRouter()
 router.register(r'students', views.StudentPerformanceViewSet, basename='student')
@@ -26,4 +28,6 @@ router.register(r'batches', views.ImportBatchViewSet, basename='batch')
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
+    path('api/register/', RegisterView.as_view(), name='register'),
+    path('api/token/', obtain_auth_token, name='api_token'),
 ]
